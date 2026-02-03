@@ -15,14 +15,40 @@ library(MASS)
 library(tidyverse)
 library(lme4)
 library(nlme)
+library(knitr)
 source("R/helper_functions.R")
+
+
+```
+
+
+Now, we generate 'population' data according to a 2PLM model for nJ = 10 items, of size N = 1000000, and approximate the SEM, and cSEM per sumscore.
+
+```{r simulate-data, echo = FALSE, warning = FALSE, message = FALSE}
+nJ <- 10 #item
+J <-10 #replicates
+appr_pop_SEM <- data.frame(matrix(nrow = 1, ncol = J))
+colnames(appr_pop_SEM) <- paste0("repl", 1:J) 
+
+appr_pop_cSEM <- data.frame(matrix(nrow = nJ+1, ncol = J))
+colnames(appr_pop_cSEM) <- paste0("repl", 1:J) 
+rownames(appr_pop_cSEM) <- paste0("sumscore", 0:nJ) 
+
+# Approximate population values using a very large simulated sample (assuming standard normal theta)
+for (jj in 1:J ) {
+X <- simulateGRM(1000000, nJ = nJ)
+appr_pop_SEM[1,jj] <- sqrt(mean((rowSums(X$isc) - rowSums(X$true))^2))
+
+Xplus <- rowSums(X$isc)
+  for (ii in 0:nJ){
+    sel <- Xplus == ii
+    appr_pop_cSEM[ii + 1, jj] <- sqrt(mean((ii - rowSums(X$true)[sel])^2))
+  }
+}
+
+kable(appr_pop_SEM, caption = "Approximate population SEM, for 10 replicates")
+kable(appr_pop_cSEM, caption = "Approximate population cSEMs, for 10 replicates")
   
-
-```
-
-```{r load-data, echo = FALSE, warning = FALSE, message = FALSE}
-
-
-
-```
+plot(0:10, appr_pop_cSEM[, 1], type="b", pch = 16, main = "cSEM as a function of sum scores, for replicate 1",
+  xlab = "sumscore", ylab = "approximate cSEM")
 
