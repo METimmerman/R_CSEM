@@ -17,14 +17,15 @@ library(lme4)
 library(nlme)
 library(knitr)
 source("R/helper_functions.R")
-
-
 ```
 
 
-Now, we generate 'population' data according to a 2PLM model for nJ = 10 items, of size N = 1000000, and approximate the SEM, and cSEM per sumscore.
+#Population data, SEM and cSEM per sumscore
 
-```{r simulate-data, echo = FALSE, warning = FALSE, message = FALSE}
+We generate 'population' data according to a 2PLM model for nJ = 10 items, of size N = 1000000. Then we approximate the SEM, and cSEM per sumscore.
+We do this for 10 replicates, and print the results in tables.
+
+```{r simulate-pop, echo = FALSE, warning = FALSE, message = FALSE}
 nJ <- 10 #item
 J <-10 #replicates
 appr_pop_SEM <- data.frame(matrix(nrow = 1, ncol = J))
@@ -52,3 +53,72 @@ kable(appr_pop_cSEM, caption = "Approximate population cSEMs, for 10 replicates"
 plot(0:10, appr_pop_cSEM[, 1], type="b", pch = 16, main = "cSEM as a function of sum scores, for replicate 1",
   xlab = "sumscore", ylab = "approximate cSEM")
 
+```
+
+There seems to be still much variability across replicates, in estimating the SEM and cSEM. 
+@Wilco: Klopt dit wel? Zou jij kunnen kijken?
+
+
+#Sample data, SEM and cSEM per sumscore
+Now, we generate sample data of size n = 1000. 
+
+```{r simulate-sample, echo = FALSE, warning = FALSE, message = FALSE}
+nJ <- 10 #item
+J <-10 #replicates
+
+sam_estSEMs <- data.frame(matrix(nrow = 4, ncol = J))
+colnames(sam_estSEMs) <- paste0("repl", 1:J) 
+rownames(sam_estSEMs) <- c("SEM_alpha","SEM_lmer","SEM_lme_nocs","SEM_lme_cs" )
+
+for (jj in 1:J ) {
+X <- simulateGRM(nN = 1000, nJ = nJ)$isc
+Xwide <- as.data.frame(X)
+colnames(Xwide) <- paste0("I", 1:ncol(X))
+Xwide$Person <- rownames(X) %||% 1:nrow(X)
+  
+# Compute sample statistics
+alpha <- psychometric::alpha(X)
+SEM_alpha <- sqrt(sum(var(X)) * (1-alpha))
+
+# Estimating the unconditional SEM for IRT generated data using different set-ups
+  Xlong <- pivot_longer(
+    Xwide,
+    cols = -Person,
+    names_to = "Item",
+    values_to = "Score"
+  )
+
+  
+# via lmer (from lme4) - random intercept model, persons random, items fixed
+model <- lmer(Score ~ Item + (1 | Person), data = Xlong, REML = TRUE)
+res_term <- as.data.frame(VarCorr(model))[2, 4]
+SEM_lmer <- sqrt(res_term * nJ)
+
+#all.equal(SEM_lme, SEM_alpha)  # numeric laten zien dat SEM via Alpha = SEM via lmer
+  
+
+# via nlme - no compound symmtry imposed
+model_cs <- lme(
+    fixed = Score ~ Item,
+    random = ~1 | Person,
+    data = Xlong
+  )
+  res_term <- as.numeric(VarCorr(model_cs)[2, 1])
+  SEM_lme_nocs <- sqrt(res_term * nJ)
+#  all.equal(SEM_lme_cs, SEMsq)
+
+
+# via nlme compound symmetry imposed
+model_cs <- lme(
+    fixed = Score ~ Item,
+    random = ~1 | Person,
+    correlation = corCompSymm(form = ~1 | Person),
+    data = Xlong
+  )
+  res_term <- as.numeric(VarCorr(model_cs)[2, 1])
+  SEM_lme_cs <- sqrt(res_term * nJ)
+#  all.equal(SEM_lme_cs, SEMsq)
+  
+sam_estSEMs[,jj] <- c(SEM_alpha, SEM_lmer, SEM_lme_nocs, SEM_lme_cs)
+kable(sam_estSEMs, caption = "Estimated SEMs, via alpha, lmer, lme without compound symmetry, and with compound symmetry, for 10 replicates")
+}  
