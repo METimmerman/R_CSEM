@@ -59,7 +59,7 @@ There seems to be still much variability across replicates, in estimating the SE
 @Wilco: Klopt dit wel? Zou jij kunnen kijken?
 
 
-#Sample data, SEM and cSEM per sumscore
+#Sample data, SEMs via alpha, lmer and lme (both with compound symmetry and without) 
 Now, we generate sample data of size n = 1000. 
 
 ```{r simulate-sample, echo = FALSE, warning = FALSE, message = FALSE}
@@ -90,35 +90,54 @@ SEM_alpha <- sqrt(sum(var(X)) * (1-alpha))
 
   
 # via lmer (from lme4) - random intercept model, persons random, items fixed
-model <- lmer(Score ~ Item + (1 | Person), data = Xlong, REML = TRUE)
+model <-  try( lmer(Score ~ Item + (1 | Person), data = Xlong, REML = TRUE)
+    , silent = TRUE)
+ if (inherits(model, "try-error")) {
+   SEM_lmer  <- NA
+  } else {
 res_term <- as.data.frame(VarCorr(model))[2, 4]
 SEM_lmer <- sqrt(res_term * nJ)
+  }
+
 
 #all.equal(SEM_lme, SEM_alpha)  # numeric laten zien dat SEM via Alpha = SEM via lmer
   
 
 # via nlme - no compound symmtry imposed
-model_cs <- lme(
-    fixed = Score ~ Item,
+model <-  try( lme(fixed = Score ~ Item,
     random = ~1 | Person,
-    data = Xlong
-  )
-  res_term <- as.numeric(VarCorr(model_cs)[2, 1])
+    data = Xlong)
+    , silent = TRUE)
+  
+ if (inherits(model, "try-error")) {
+   SEM_lme_nocs  <- NA
+  } else {
+  res_term <- as.numeric(VarCorr(model)[2, 1])
   SEM_lme_nocs <- sqrt(res_term * nJ)
-#  all.equal(SEM_lme_cs, SEMsq)
-
+  }
 
 # via nlme compound symmetry imposed
-model_cs <- lme(
+model <-  try( lme
+    (
     fixed = Score ~ Item,
     random = ~1 | Person,
     correlation = corCompSymm(form = ~1 | Person),
     data = Xlong
-  )
-  res_term <- as.numeric(VarCorr(model_cs)[2, 1])
+    )
+    , silent = TRUE)
+  
+ if (inherits(model, "try-error")) {
+   SEM_lme_cs  <- NA
+  } else {
+  res_term <- as.numeric(VarCorr(model)[2, 1])
   SEM_lme_cs <- sqrt(res_term * nJ)
+  }
+
 #  all.equal(SEM_lme_cs, SEMsq)
   
 sam_estSEMs[,jj] <- c(SEM_alpha, SEM_lmer, SEM_lme_nocs, SEM_lme_cs)
 kable(sam_estSEMs, caption = "Estimated SEMs, via alpha, lmer, lme without compound symmetry, and with compound symmetry, for 10 replicates")
-}  
+} 
+```
+
+
