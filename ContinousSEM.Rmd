@@ -226,17 +226,27 @@ for (jj in 1:3) {
   
 sam_estcSEMs_1M <- data.frame(matrix(nrow = 3, ncol = nJ+1))
 colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
-rownames(sam_estcSEMs_1M) <- c("cSEM_lme_1","cSEM_lme_2","cSEM_lme_3" )
+rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
 
 
 X <- simulateGRM(nN = 1000, nJ = nJ)$isc
 Xwide <- as.data.frame(X)
 colnames(Xwide) <- paste0("I", 1:ncol(X))
 Xwide$Person <- rownames(X) %||% 1:nrow(X)
-Xplus <- (rowSums(Xwide[, 1:nJ])+0.0001)
-Xvals_Xplus <- seq(0.0001, 10.0001, by = 1) # vector van Xplus waarden to evaluate
-Xplus2 <- (rowSums(Xwide[, 1:nJ])-5)
-Xvals_Xplus2 <- (seq(-5, 5, by = 1))^2 # vector van Xplus2 waarden to evaluate
+Xsum   <- rowSums(Xwide[, 1:nJ])
+Xc     <- Xsum - 5
+Xplus  <- Xsum + 0.0001
+Xplus2 <- Xc^2
+
+X_eval <- seq(0, 10, by = 1)
+Xplus_eval  <- X_eval + 0.0001
+Xplus2_eval <- (X_eval - 5)^2
+
+#Xplus <- (rowSums(Xwide[, 1:nJ])+0.0001)
+#Xvals_Xplus <- seq(0.0001, 10.0001, by = 1) # vector van Xplus waarden to evaluate
+#Xplus2 <- (rowSums(Xwide[, 1:nJ])-5)
+#Xvals_Xplus2 <- (seq(-5, 5, by = 1))^2 # vector van Xplus2 waarden to evaluate
+
 Xwide  <- Xwide %>% mutate(Xplus = Xplus, Xplus2)
 
 Xlong <- pivot_longer(
@@ -256,7 +266,7 @@ model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(f
   } else {
 sigma_hat <- model$sigma
 gamma_hat <- coef(model$modelStruct$varStruct, unconstrained = FALSE) # stap 2: gamma van varExp
-resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xvals_Xplus)) # stap 4: model-implied residual variances 
+resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xplus_eval)) # stap 4: model-implied residual variances 
 cSEM_1 <- sqrt(resid_var * nJ)
 }
 
@@ -268,7 +278,7 @@ model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(f
   } else {
 sigma_hat <- model$sigma
 gamma_hat <- coef(model$modelStruct$varStruct, unconstrained = FALSE) # stap 2: gamma van varExp
-resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xvals_Xplus2)) # stap 4: model-implied residual variances 
+resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xplus2_eval)) # stap 4: model-implied residual variances 
 cSEM_2 <- sqrt(resid_var * nJ)
 }
 
@@ -283,14 +293,15 @@ model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varComb(
   } else {
 sigma2 <- model$sigma^2
 gamma  <- coef(model$modelStruct$varStruct, unconstrained = FALSE)
-resid_var <- sigma2 * exp(2 * (gamma[1] * Xvals_Xplus + gamma[2] * Xvals_Xplus2))
+resid_var <- sigma2 *
+    exp(2 * (gamma[1] * Xplus_eval +
+             gamma[2] * Xplus2_eval))
 cSEM_3 <- sqrt(resid_var * nJ)
 }
 
+sam_estcSEMs_1M <- rbind(cSEM_1, cSEM_2, cSEM_3)
 
-
-#print(kable(sam_estcSEMs, caption = "Estimated cSEMs per sumscore, via lmer, lme without compound symmetry, and with #compound symmetry, for one replicate",digits = 3))
-
+print(kable(sam_estcSEM_1M, caption = "Estimated cSEMs per sumscore, via model-implied residual variances, for one replicate",digits = 3))
 }
 ```
 
