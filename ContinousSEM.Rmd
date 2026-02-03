@@ -26,6 +26,7 @@ We generate 'population' data according to a 2PLM model for nJ = 10 items, of si
 We do this for 10 replicates, and print the results in tables.
 
 ```{r simulate-pop, echo = FALSE, warning = FALSE, message = FALSE}
+
 nJ <- 10 #item
 J <-10 #replicates
 appr_pop_SEM <- data.frame(matrix(nrow = 1, ncol = J))
@@ -59,10 +60,11 @@ There seems to be still much variability across replicates, in estimating the SE
 @Wilco: Klopt dit wel? Zou jij kunnen kijken?
 
 
-#Sample data, SEMs via alpha, lmer and lme (both with compound symmetry and without) 
-Now, we generate sample data of size n = 1000. 
+# Sample data, SEMs via alpha, lmer and lme (both with compound symmetry and without) 
 
-```{r simulate-sample, echo = FALSE, warning = FALSE, message = FALSE}
+Now, we generate sample data of size n = 1000. We estimate the SEM via coefficient alpha, and the estimated residuals of a rm-anova, estimated in 3 ways: with 2 types of model specifications (random intercept model without compound symmetry (cs), and with cs), and 2 functions (lmer, lme). We do this for 10 replicates, to assess the stability of estimation.
+
+```{r simulate-sample_SEM, echo = FALSE, warning = FALSE, message = FALSE}
 nJ <- 10 #item
 J <-10 #replicates
 
@@ -90,7 +92,7 @@ SEM_alpha <- sqrt(sum(var(X)) * (1-alpha))
 
   
 # via lmer (from lme4) - random intercept model, persons random, items fixed
-model <-  try( lmer(Score ~ Item + (1 | Person), data = Xlong, REML = TRUE)
+model <-  try(lmer(Score ~ Item + (1 | Person), data = Xlong, REML = TRUE)
     , silent = TRUE)
  if (inherits(model, "try-error")) {
    SEM_lmer  <- NA
@@ -99,14 +101,8 @@ res_term <- as.data.frame(VarCorr(model))[2, 4]
 SEM_lmer <- sqrt(res_term * nJ)
   }
 
-
-#all.equal(SEM_lme, SEM_alpha)  # numeric laten zien dat SEM via Alpha = SEM via lmer
-  
-
 # via nlme - no compound symmtry imposed
-model <-  try( lme(fixed = Score ~ Item,
-    random = ~1 | Person,
-    data = Xlong)
+model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, data = Xlong)
     , silent = TRUE)
   
  if (inherits(model, "try-error")) {
@@ -118,12 +114,8 @@ model <-  try( lme(fixed = Score ~ Item,
 
 # via nlme compound symmetry imposed
 model <-  try( lme
-    (
-    fixed = Score ~ Item,
-    random = ~1 | Person,
-    correlation = corCompSymm(form = ~1 | Person),
-    data = Xlong
-    )
+    (fixed = Score ~ Item, random = ~1 | Person, correlation = corCompSymm(form = ~1 | Person),
+    data = Xlong)
     , silent = TRUE)
   
  if (inherits(model, "try-error")) {
@@ -132,12 +124,173 @@ model <-  try( lme
   res_term <- as.numeric(VarCorr(model)[2, 1])
   SEM_lme_cs <- sqrt(res_term * nJ)
   }
-
-#  all.equal(SEM_lme_cs, SEMsq)
-  
 sam_estSEMs[,jj] <- c(SEM_alpha, SEM_lmer, SEM_lme_nocs, SEM_lme_cs)
+}
+
 kable(sam_estSEMs, caption = "Estimated SEMs, via alpha, lmer, lme without compound symmetry, and with compound symmetry, for 10 replicates")
-} 
+
 ```
 
+The estimated SEMs are consistently equal across the four estimates (via alpha, lmer and lme). A NA is due to non-convergence problems.
+
+In general, when trying out different replicates and settings, lmer showed less non-convergence issues than lme. Further, lme_cs (so with compound symmtry imposed) and lme_nocs (without compound symmtry imposed) specify the same models. The model specified with lme_nocs (and lmer) is simply the random intercept model, with level 2 persons, level 1 items, and the items as fixed effects. The model-implied covariance structure is the same as that in a compound symmetry model. Imposing compound symmetry explicitly may steer the algorithm in the correct direction - but in principle it is superfluous.
+
+
+
+# Sample data, cSEMs per sumscore, via lmer and lme (with and without compound symmetry)
+Now, we generate sample data of size n = 1000. We estimate the cSEMs per sum score, via the estimated residuals of a rm-anova, estimated in 3 ways: with 2 types of model specifications (random intercept model without compound symmetry (cs), and with cs), and 2 functions (lmer, lme). 
+
+```{r simulate-sample_cSEM, echo = FALSE, warning = FALSE, message = FALSE}
+nJ <- 10 #items
+
+for (jj in 1:3) {  
+sam_estcSEMs <- data.frame(matrix(nrow = 3, ncol = nJ+1))
+colnames(sam_estcSEMs) <- paste0("sum", 0:nJ) 
+rownames(sam_estcSEMs) <- c("cSEM_lmer","cSEM_lme_nocs","cSEM_lme_cs" )
+
+
+X <- simulateGRM(nN = 1000, nJ = nJ)$isc
+Xwide <- as.data.frame(X)
+colnames(Xwide) <- paste0("I", 1:ncol(X))
+Xwide$Person <- rownames(X) %||% 1:nrow(X)
+  
+
+Xplus <- rowSums(Xwide[, 1:nJ])
+Xwide  <- Xwide %>% mutate(Xplus = Xplus)
+ # head(Xwide)
+  
+  Xlong <- pivot_longer(
+    Xwide,
+    cols = 1:nJ,
+    names_to = "Item",
+    values_to = "Score"
+  )
+#  head(Xlong)
+  
+for (jjn in 0:nJ ) {  
+Xlong_select  <- Xlong %>% filter(Xplus == jjn)
+
+# via lmer (from lme4) - random intercept model, persons random, items fixed
+model <-  try(lmer(Score ~ Item + (1 | Person), data = Xlong_select, REML = TRUE)
+    , silent = TRUE)
+ if (inherits(model, "try-error")) {
+   cSEM_lmer  <- NA
+  } else {
+res_term <- as.data.frame(VarCorr(model))[2, 4]
+cSEM_lmer <- sqrt(res_term * nJ)
+}
+
+# via nlme - no compound symmtry imposed
+model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, data = Xlong_select)
+    , silent = TRUE)
+ if (inherits(model, "try-error")) {
+   cSEM_lme_nocs  <- NA
+  } else {
+  res_term <- as.numeric(VarCorr(model)[2, 1])
+  cSEM_lme_nocs <- sqrt(res_term * nJ)
+  }
+
+  
+# via nlme compound symmetry imposed
+model <-  try(lme
+    (fixed = Score ~ Item, random = ~1 | Person, correlation = corCompSymm(form = ~1 | Person),
+    data = Xlong_select)
+    , silent = TRUE)
+  
+ if (inherits(model, "try-error")) {
+   cSEM_lme_cs  <- NA
+  } else {
+  res_term <- as.numeric(VarCorr(model)[2, 1])
+  cSEM_lme_cs <- sqrt(res_term * nJ)
+  }
+sam_estcSEMs[,jjn+1] <- c(cSEM_lmer, cSEM_lme_nocs, cSEM_lme_cs)
+}
+
+print(kable(sam_estcSEMs, caption = "Estimated cSEMs per sumscore, via lmer, lme without compound symmetry, and with compound symmetry, for one replicate",digits = 3))
+
+}
+```
+
+Now, the cSEM_lme_cs estimates are consistently lower than the cSEMs as estimated with lmer and lme, without the cs.
+Apparently, now requiring the superfluous parameter to estimate makes things differently. I think the cs model is overparametrized, and now results in a non-unique solution. 
+It seems safer to continue with the specification without compound symmetry imposed.
+
+# Sample data, cSEMs per sumscore, via modeling residual variances as a function of the sumscores
+
+Now, we try to model the full sample data (N=1000) with a random effect model, allowing for heteroscedasticity. We can only do via lme, since lmer does not facilitate heteroscedasticity.  
+
+```{r simulate-sample_cSEM_1model, echo = FALSE, warning = FALSE, message = FALSE}
+nJ <- 10 #items
+
+for (jj in 1:3) {  
+  
+sam_estcSEMs_1M <- data.frame(matrix(nrow = 3, ncol = nJ+1))
+colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
+rownames(sam_estcSEMs_1M) <- c("cSEM_lme_1","cSEM_lme_2","cSEM_lme_3" )
+
+
+X <- simulateGRM(nN = 1000, nJ = nJ)$isc
+Xwide <- as.data.frame(X)
+colnames(Xwide) <- paste0("I", 1:ncol(X))
+Xwide$Person <- rownames(X) %||% 1:nrow(X)
+Xplus <- (rowSums(Xwide[, 1:nJ])+0.0001)
+Xvals_Xplus <- seq(0.0001, 10.0001, by = 1) # vector van Xplus waarden to evaluate
+Xplus2 <- (rowSums(Xwide[, 1:nJ])-5)
+Xvals_Xplus2 <- (seq(-5, 5, by = 1))^2 # vector van Xplus2 waarden to evaluate
+Xwide  <- Xwide %>% mutate(Xplus = Xplus, Xplus2)
+
+Xlong <- pivot_longer(
+Xwide,
+    cols = 1:nJ,
+    names_to = "Item",
+    values_to = "Score"
+  )
+
+# via nlme - no compound symmetry imposed
+
+#model 1: varExp, linear
+model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(form = ~ Xplus), data = Xlong)
+    , silent = TRUE)
+ if (inherits(model, "try-error")) {
+   cSEM_1  <- matrix(nrow = 1, ncol = nJ+1, NA)
+  } else {
+sigma_hat <- model$sigma
+gamma_hat <- coef(model$modelStruct$varStruct, unconstrained = FALSE) # stap 2: gamma van varExp
+resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xvals_Xplus)) # stap 4: model-implied residual variances 
+cSEM_1 <- sqrt(resid_var * nJ)
+}
+
+#model 2: varExp, quadratic
+model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(form = ~ Xplus2), data = Xlong)
+    , silent = TRUE)
+ if (inherits(model, "try-error")) {
+   cSEM_2  <- matrix(nrow = 1, ncol = nJ+1, NA)
+  } else {
+sigma_hat <- model$sigma
+gamma_hat <- coef(model$modelStruct$varStruct, unconstrained = FALSE) # stap 2: gamma van varExp
+resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xvals_Xplus2)) # stap 4: model-implied residual variances 
+cSEM_2 <- sqrt(resid_var * nJ)
+}
+
+#model 3: varExp, linear plus quadratic
+model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varComb(
+    varExp(form = ~ Xplus),
+    varExp(form = ~ Xplus2)
+  ), data = Xlong)
+    , silent = TRUE)
+ if (inherits(model, "try-error")) {
+   cSEM_3  <- matrix(nrow = 1, ncol = nJ+1, NA)
+  } else {
+sigma2 <- model$sigma^2
+gamma  <- coef(model$modelStruct$varStruct, unconstrained = FALSE)
+resid_var <- sigma2 * exp(2 * (gamma[1] * Xvals_Xplus + gamma[2] * Xvals_Xplus2))
+cSEM_3 <- sqrt(resid_var * nJ)
+}
+
+
+
+#print(kable(sam_estcSEMs, caption = "Estimated cSEMs per sumscore, via lmer, lme without compound symmetry, and with #compound symmetry, for one replicate",digits = 3))
+
+}
+```
 
