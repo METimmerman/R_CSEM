@@ -1,5 +1,5 @@
 ---
-title: "Continuous SEM"
+title: "Continuous SEM, with frequentist random intercept modeling with heteroscedasticity"
 author: "Marieke Timmerman"
 date: "`r Sys.Date()`"
 output:
@@ -22,8 +22,8 @@ source("R/helper_functions.R")
 
 # Population data, SEM and cSEM per sumscore
 
-We generate 'population' data according to a 2PLM model for nJ = 10 items, of size N = 1000000. Then we approximate the SEM, and cSEM per sumscore.
-We do this for 10 replicates, and print the results in tables.
+We generate 'population' data according to a 2PLM model for nJ = 10 items, of size N = 100000. Then we approximate the SEM, and cSEM per sumscore. We do this for 10 replicates, and print the results in tables.
+The item parameters are taken fixed across replicates, and the ability parameters vary across replicates.
 
 ```{r simulate-pop, echo = FALSE, warning = FALSE, message = FALSE}
 
@@ -38,7 +38,7 @@ rownames(appr_pop_cSEM) <- paste0("sumscore", 0:nJ)
 
 # Approximate population values using a very large simulated sample (assuming standard normal theta)
 for (jj in 1:J ) {
-X <- simulateGRM(100, nJ = nJ, itemfixed = FALSE)
+X <- simulateGRM(100000, nJ = nJ, itemfixed = TRUE)
 appr_pop_SEM[1,jj] <- sqrt(mean((rowSums(X$isc) - rowSums(X$true))^2))
 
 Xplus <- rowSums(X$isc)
@@ -56,9 +56,10 @@ plot(0:10, appr_pop_cSEM[, 1], type="b", pch = 16, main = "cSEM as a function of
 
 ```
 
-There seems to be still much variability across replicates, in estimating the SEM and cSEM. 
+Even with this large sample size there is some variability across replicates. Increasing the sample size does help in reducing this variability, so I am confident that this code is correct.
 
-@Wilco: Klopt dit wel? Zou jij kunnen kijken?
+@Wilco: Wat ik noem: "Approximate population cSEMs" is dat niet. ZOu jij dit willen corrigeren, en aanvullen met de 3 andere opties erbij?
+
 
 
 # Sample data, SEMs via alpha, lmer and lme (both with compound symmetry and without) 
@@ -223,7 +224,7 @@ We do so via an exponential term. I fitted three models: 1. linear effect of Xpl
 To get an idea of the variability across replicates, I simulated 3 replicates, and provide the estimates in 3 successive tables.
 
 
-```{r simulate-sample_cSEM_1model, echo = FALSE, warning = FALSE, message = FALSE}
+```{r simulate-sample_cSEM_1model, echo = FALSE, warning = FALSE, message = FALSE, fig.show='hold'}
 nJ <- 10 #items
 
 for (jj in 1:3) {  
@@ -246,11 +247,6 @@ X_eval <- seq(0, 10, by = 1)
 Xplus_eval  <- X_eval + 0.0001
 Xplus2_eval <- (X_eval - 5)^2
 
-#Xplus <- (rowSums(Xwide[, 1:nJ])+0.0001)
-#Xvals_Xplus <- seq(0.0001, 10.0001, by = 1) # vector van Xplus waarden to evaluate
-#Xplus2 <- (rowSums(Xwide[, 1:nJ])-5)
-#Xvals_Xplus2 <- (seq(-5, 5, by = 1))^2 # vector van Xplus2 waarden to evaluate
-
 Xwide  <- Xwide %>% mutate(Xplus = Xplus, Xplus2)
 
 Xlong <- pivot_longer(
@@ -268,23 +264,35 @@ model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(f
  if (inherits(model, "try-error")) {
    cSEM_1  <- matrix(nrow = 1, ncol = nJ+1, NA)
   } else {
-sigma_hat <- model$sigma
-gamma_hat <- coef(model$modelStruct$varStruct, unconstrained = FALSE) # stap 2: gamma van varExp
-resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xplus_eval)) # stap 4: model-implied residual variances 
-cSEM_1 <- sqrt(resid_var * nJ)
-}
+cSEM_1 <- eval_resid_var(model, Xplus_eval) 
+  }
+
+plot_resid_var(model, Xlong$Xplus)
+
+p <- plot_resid_var(model, Xlong$Xplus)
+print(p)
 
 #model 2: varExp, quadratic
-model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(form = ~ Xplus2), data = Xlong)
-    , silent = TRUE)
- if (inherits(model, "try-error")) {
-   cSEM_2  <- matrix(nrow = 1, ncol = nJ+1, NA)
-  } else {
-sigma_hat <- model$sigma
-gamma_hat <- coef(model$modelStruct$varStruct, unconstrained = FALSE) # stap 2: gamma van varExp
-resid_var <- (sigma_hat^2 * exp(2 * gamma_hat * Xplus2_eval)) # stap 4: model-implied residual variances 
-cSEM_2 <- sqrt(resid_var * nJ)
+model <- try(
+  lme(
+    fixed = Score ~ Item,
+    random = ~1 | Person,
+    weights = varExp(form = ~ Xplus2),
+    data = Xlong
+  ),
+  silent = TRUE
+)
+
+if (inherits(model, "try-error")) {
+  cSEM_2 <- matrix(NA, nrow = 1, ncol = nJ + 1)
+} else {
+  cSEM_2 <- eval_resid_var(model, Xplus2_eval)
+  plot_resid_var(model, Xlong$Xplus)
 }
+
+
+
+
 
 #model 3: varExp, linear plus quadratic
 model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varComb(
@@ -295,15 +303,9 @@ model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varComb(
  if (inherits(model, "try-error")) {
    cSEM_3  <- matrix(nrow = 1, ncol = nJ+1, NA)
   } else {
-sigma2 <- model$sigma^2
-gamma  <- coef(model$modelStruct$varStruct, unconstrained = FALSE)
-resid_var <- sigma2 *
-    exp(2 * (gamma[1] * Xplus_eval +
-             gamma[2] * Xplus2_eval))
-cSEM_3 <- sqrt(resid_var * nJ)
+cSEM_3 <- eval_resid_var(model, Xplus_eval, Xplus2_eval) 
 }
 
-sam_estcSEMs_1M <- rbind(cSEM_1, cSEM_2, cSEM_3)
 
 colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
 rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
