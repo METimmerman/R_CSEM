@@ -20,7 +20,7 @@ source("R/helper_functions.R")
 ```
 
 
-#Population data, SEM and cSEM per sumscore
+# Population data, SEM and cSEM per sumscore
 
 We generate 'population' data according to a 2PLM model for nJ = 10 items, of size N = 1000000. Then we approximate the SEM, and cSEM per sumscore.
 We do this for 10 replicates, and print the results in tables.
@@ -38,7 +38,7 @@ rownames(appr_pop_cSEM) <- paste0("sumscore", 0:nJ)
 
 # Approximate population values using a very large simulated sample (assuming standard normal theta)
 for (jj in 1:J ) {
-X <- simulateGRM(1000000, nJ = nJ)
+X <- simulateGRM(100, nJ = nJ, itemfixed = FALSE)
 appr_pop_SEM[1,jj] <- sqrt(mean((rowSums(X$isc) - rowSums(X$true))^2))
 
 Xplus <- rowSums(X$isc)
@@ -57,6 +57,7 @@ plot(0:10, appr_pop_cSEM[, 1], type="b", pch = 16, main = "cSEM as a function of
 ```
 
 There seems to be still much variability across replicates, in estimating the SEM and cSEM. 
+
 @Wilco: Klopt dit wel? Zou jij kunnen kijken?
 
 
@@ -217,7 +218,10 @@ It seems safer to continue with the specification without compound symmetry impo
 
 # Sample data, cSEMs per sumscore, via modeling residual variances as a function of the sumscores
 
-Now, we try to model the full sample data (N=1000) with a random effect model, allowing for heteroscedasticity. We can only do via lme, since lmer does not facilitate heteroscedasticity.  
+Now, we try to model the full sample data (N=1000) with a random effect model, allowing for heteroscedasticity, depending on the sum score (Xplus). We can only do via lme, since lmer does not facilitate heteroscedasticity.  
+We do so via an exponential term. I fitted three models: 1. linear effect of Xplus; 2. quadratic effect of Xplus; 3. linear plus quadratic effect of Xplus.
+To get an idea of the variability across replicates, I simulated 3 replicates, and provide the estimates in 3 successive tables.
+
 
 ```{r simulate-sample_cSEM_1model, echo = FALSE, warning = FALSE, message = FALSE}
 nJ <- 10 #items
@@ -225,8 +229,8 @@ nJ <- 10 #items
 for (jj in 1:3) {  
   
 sam_estcSEMs_1M <- data.frame(matrix(nrow = 3, ncol = nJ+1))
-colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
-rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
+#colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
+#rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
 
 
 X <- simulateGRM(nN = 1000, nJ = nJ)$isc
@@ -301,7 +305,17 @@ cSEM_3 <- sqrt(resid_var * nJ)
 
 sam_estcSEMs_1M <- rbind(cSEM_1, cSEM_2, cSEM_3)
 
-print(kable(sam_estcSEM_1M, caption = "Estimated cSEMs per sumscore, via model-implied residual variances, for one replicate",digits = 3))
+colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
+rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
+
+
+print(kable(sam_estcSEMs_1M, caption = "Estimated cSEMs per sumscore, via model-implied residual variances, for one replicate",digits = 3))
 }
 ```
+
+
+# Future work
+
+** Willen we nog flexibelere variantiefuncties (splines, smooths), dan lijkt het erop dat we Bayesiaans moeten gaan, via brms, of Stan. Maar tot zover maar eerst even kijken of we dit uberhaupt een goede aanpak vinden.
+
 
