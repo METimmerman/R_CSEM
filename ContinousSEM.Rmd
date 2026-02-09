@@ -1,5 +1,5 @@
 ---
-title: "Continuous SEM, with frequentist random intercept modeling with heteroscedasticity"
+title: "Note: Continuous SEM, with frequentist random intercept modeling with heteroscedasticity"
 author: "Marieke Timmerman"
 date: "`r Sys.Date()`"
 output:
@@ -220,19 +220,17 @@ It seems safer to continue with the specification without compound symmetry impo
 # Sample data, cSEMs per sumscore, via modeling residual variances as a function of the sumscores
 
 Now, we try to model the full sample data (N=1000) with a random effect model, allowing for heteroscedasticity, depending on the sum score (Xplus). We can only do via lme, since lmer does not facilitate heteroscedasticity.  
-We do so via an exponential term. I fitted three models: 1. linear effect of Xplus; 2. quadratic effect of Xplus; 3. linear plus quadratic effect of Xplus.
-To get an idea of the variability across replicates, I simulated 3 replicates, and provide the estimates in 3 successive tables.
-
+We do so via an exponential term. We fitted three models: 1. linear effect of Xplus; 2. quadratic effect of Xplus; 3. linear plus quadratic effect of Xplus.
+For each of the three models, the following is shown:
+** The estimates of cSEM per sum score (0 to 10) are printed in a table.
+** A residual plot - plotting the fitted values (including the random intercepts) by the normalized residuals. 
 
 ```{r simulate-sample_cSEM_1model, echo = FALSE, warning = FALSE, message = FALSE, fig.show='hold'}
 nJ <- 10 #items
 
-for (jj in 1:3) {  
-  
+for (jj in 1:1) {  
 sam_estcSEMs_1M <- data.frame(matrix(nrow = 3, ncol = nJ+1))
-#colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
-#rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
-
+fit <- data.frame(matrix(nrow = 3, ncol = 2))
 
 X <- simulateGRM(nN = 1000, nJ = nJ)$isc
 Xwide <- as.data.frame(X)
@@ -262,15 +260,13 @@ Xwide,
 model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varExp(form = ~ Xplus), data = Xlong)
     , silent = TRUE)
  if (inherits(model, "try-error")) {
-   cSEM_1  <- matrix(nrow = 1, ncol = nJ+1, NA)
+   sam_estcSEMs_1M[1,]  <- matrix(nrow = 1, ncol = nJ+1, NA)
   } else {
-cSEM_1 <- eval_resid_var(model, Xplus_eval) 
-  }
+  fit[1,] <- c(logLik(model),BIC(model))
+  sam_estcSEMs_1M[1,] <- eval_resid_var(model, Xplus_eval) 
+  print(plot_resid_var(model, Xlong$Xplus, title = "linear effect for varEXp"))
+}
 
-plot_resid_var(model, Xlong$Xplus)
-
-p <- plot_resid_var(model, Xlong$Xplus)
-print(p)
 
 #model 2: varExp, quadratic
 model <- try(
@@ -284,14 +280,12 @@ model <- try(
 )
 
 if (inherits(model, "try-error")) {
-  cSEM_2 <- matrix(NA, nrow = 1, ncol = nJ + 1)
+   sam_estcSEMs_1M[2,]  <- matrix(nrow = 1, ncol = nJ+1, NA)
 } else {
-  cSEM_2 <- eval_resid_var(model, Xplus2_eval)
-  plot_resid_var(model, Xlong$Xplus)
+ fit[2,] <- c(logLik(model),BIC(model))
+  sam_estcSEMs_1M[2,] <- eval_resid_var(model, Xplus2_eval)
+  print(plot_resid_var(model, Xlong$Xplus, title = "quadratic effect for varEXp"))
 }
-
-
-
 
 
 #model 3: varExp, linear plus quadratic
@@ -301,23 +295,31 @@ model <-  try(lme(fixed = Score ~ Item, random = ~1 | Person, weights = varComb(
   ), data = Xlong)
     , silent = TRUE)
  if (inherits(model, "try-error")) {
-   cSEM_3  <- matrix(nrow = 1, ncol = nJ+1, NA)
+    sam_estcSEMs_1M[3,]  <- matrix(nrow = 1, ncol = nJ+1, NA)
   } else {
-cSEM_3 <- eval_resid_var(model, Xplus_eval, Xplus2_eval) 
+fit[3,] <- c(logLik(model),BIC(model))
+ sam_estcSEMs_1M[3,] <- eval_resid_var(model, Xplus_eval, Xplus2_eval) 
+print(plot_resid_var(model, Xlong$Xplus, title = "linear and quadratic effect for varEXp"))
 }
-
 
 colnames(sam_estcSEMs_1M) <- paste0("sum", 0:nJ) 
 rownames(sam_estcSEMs_1M) <- c("cSEM_lme_lin","cSEM_lme_qua","cSEM_lme_lin+qua" )
 
+rownames(fit) <- c("lme_lin","lme_qua","lme_lin+qua" )
+colnames(fit) <- c("logLik","BIC" )
+print(kable(fit, caption = "Fit",digits = 3))
+
+best_model <- rownames(fit)[which.min(fit$BIC)]
 
 print(kable(sam_estcSEMs_1M, caption = "Estimated cSEMs per sumscore, via model-implied residual variances, for one replicate",digits = 3))
 }
 ```
 
+The model with the lowest  BIC is **`r best_model`**. 
+
 
 # Future work
 
-** Willen we nog flexibelere variantiefuncties (splines, smooths), dan lijkt het erop dat we Bayesiaans moeten gaan, via brms, of Stan. Maar tot zover maar eerst even kijken of we dit uberhaupt een goede aanpak vinden.
+** Willen we nog flexibelere variantiefuncties (splines, smooths), dan lijkt het erop dat we Bayesiaans moeten gaan, via brms, of Stan. Daarover gaat de volgende Note.
 
 

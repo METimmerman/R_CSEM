@@ -125,9 +125,7 @@ simulateGRM <- function(nN = 1000,
     itempars <- matrix(NA_real_, nrow = nJ, ncol = nM + 1)
     
     if (isTRUE(itemfixed)) {
-      old_seed <- .Random.seed
-      set.seed(50226)
-      on.exit({ .Random.seed <<- old_seed }, add = TRUE)
+    set.seed(50226)
     }
     
     # Discrimination parameters
@@ -195,3 +193,109 @@ simulateGRM <- function(nN = 1000,
     isc  = isc.mat
   )
 }
+
+
+#' Calculate model-implied composite SEM (cSEM) from an lme object
+#'
+#' This function computes the model-implied residual variance based on a
+#' linear mixed-effects model (`lme`) with either a single `varExp`
+#' variance structure or a combined `varComb` of two `varExp` functions,
+#' and calculates the composite standard error of measurement (cSEM)
+#' for a specified number of items.
+#'
+#' @param object An `lme` object (from `nlme::lme`) that includes a
+#'   variance function (`varExp` or `varComb(varExp(...), varExp(...))`).
+#' @param X_eval Numeric vector of predictor values for the first variance component.
+#' @param X2_eval Optional numeric vector of predictor values for the second variance component.
+#'   Required only if `object` uses `varComb` with two `varExp`s.
+#' @param nJ Integer. Number of items used to compute the composite SEM.
+#'
+#' @return Numeric vector of cSEM values corresponding to each element of
+#'   the input predictor(s).
+#'
+#' @details
+#' The model-implied residual variance is computed as:
+#' \deqn{Var(\epsilon) = \sigma^2 * \prod_i \exp(2 * \gamma_i * X_i)}
+#' where `gamma_i` are the variance function coefficients and `X_i` are
+#' the corresponding predictor values (`X_eval`, `X2_eval`).
+#' The cSEM is then \eqn{cSEM = \sqrt{Var(\epsilon) * nJ}} assuming equal
+#' residual variance across items.
+#'
+#' @examples
+#' # Single gamma example
+#' X_eval <- seq(0, 1, length.out = 5)
+#' eval_resid_var_flex(model, X_eval, nJ = 10)
+#'
+#' # Two gamma example
+#' X_eval <- seq(0, 1, length.out = 5)
+#' X2_eval <- seq(-1, 1, length.out = 5)
+#' eval_resid_var(model, X_eval, X2_eval, nJ = 10)
+eval_resid_var <- function(object, X_eval, X2_eval = NULL, nJ = 10) {
+  
+  # 1. Residual standard deviation
+  sigma_hat <- object$sigma
+  
+  # 2. Variance function coefficients (gamma)
+  var_coefs <- coef(object$modelStruct$varStruct, unconstrained = FALSE)
+  n_gamma <- length(var_coefs)
+  
+  # 3. Compute model-implied residual variance
+  if(n_gamma == 1) {
+    # Single variance function
+    resid_var <- sigma_hat^2 * exp(2 * var_coefs[1] * X_eval)
+    
+  } else if(n_gamma == 2) {
+    # Two variance functions combined
+    if(is.null(X2_eval)) stop("X2_eval must be provided for a two-component variance function")
+    if(length(X_eval) != length(X2_eval)) stop("X_eval and X2_eval must be the same length")
+    
+    resid_var <- sigma_hat^2 * exp(2 * var_coefs[1] * X_eval + 2 * var_coefs[2] * X2_eval)
+    
+  } else {
+    stop("Variance function with more than 2 components not supported")
+  }
+  
+  # 4. Composite SEM
+  cSEM_2 <- sqrt(resid_var * nJ)
+  
+  return(cSEM_2)
+}
+
+#' Plot normalized level-1 residuals versus fitted values from an lme object
+#'
+#' @param object An `lme` object (from `nlme::lme`) that includes a
+#'   variance function (`varExp` or `varComb(varExp(...), varExp(...))`).
+#' @param Xplus Numeric vector of predictor values used for coloring points.
+#'
+#' @return A ggplot object showing residuals versus fitted values.
+plot_resid_var <- function(object, Xplus, title = "Residuals vs Fitted") {
+  
+  fv  <- fitted(object, level = 1)          # conditional fitted values
+  res <- resid(object, type = "normalized") # level-1 normalized residuals
+  
+  if (length(fv) != length(res) || length(res) != length(Xplus)) {
+    stop("fv, res, and Xplus must have the same length")
+  }
+  
+  df <- data.frame(
+    fitted   = fv,
+    residual = res,
+    Xplus    = Xplus
+  )
+  
+  p <- ggplot2::ggplot(
+    df,
+    ggplot2::aes(x = fitted, y = residual, color = Xplus)
+  ) +
+    ggplot2::geom_point() +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed") +
+    ggplot2::labs(
+      x = "Fitted values (including random intercepts)",
+      y = "Normalized residuals",
+      title = title
+    )
+  
+  return(p)
+}
+
+

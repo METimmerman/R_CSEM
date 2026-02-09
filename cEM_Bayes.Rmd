@@ -1,0 +1,72 @@
+---
+title: "Note: Continuous SEM, with Bayesian random intercept modeling with heteroscedasticity"
+author: "Marieke Timmerman"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+```{r load-libraries, echo = FALSE, warning = FALSE, message = FALSE}
+#Load required R packages.
+library(MASS)
+library(tidyverse)
+#library(lme4)
+#library(nlme)
+library(knitr)
+library(brms)
+source("R/helper_functions.R")
+```
+
+
+
+
+
+# Sample data, cSEMs per sumscore, via modeling residual variances as a function of the sumscores, using Bayesian 
+
+We simulate data according to a 2PLM model for nJ = 10 items, of size N = 1000. 
+The item parameters are taken fixed across replicates, and the ability parameters vary across replicates.
+
+
+We model sample data (N=1000) with a random effect model, allowing for heteroscedasticity, depending on the sum score (Xplus).
+The residual variance depending on the sum score is modeled with splines. The model is estimated in a Bayesian way.
+
+```{r simulate-sample_cSEM_1model, echo = FALSE, warning = FALSE, message = FALSE, fig.show='hold'}
+nJ <- 10 #items
+
+#sam_estcSEMs_1M <- data.frame(matrix(nrow = 3, ncol = nJ+1))
+#fit <- data.frame(matrix(nrow = 3, ncol = 2))
+
+X <- simulateGRM(nN = 1000, nJ = nJ)$isc
+Xwide <- as.data.frame(X)
+colnames(Xwide) <- paste0("I", 1:ncol(X))
+Xwide$Person <- rownames(X) %||% 1:nrow(X)
+Xsum   <- rowSums(Xwide[, 1:nJ])
+Xc     <- Xsum - 5
+Xplus  <- Xsum + 0.0001
+
+X_eval <- seq(0, 10, by = 1)
+Xplus_eval  <- X_eval + 0.0001
+
+Xwide  <- Xwide %>% mutate(Xplus = Xplus)
+
+Xlong <- pivot_longer(
+Xwide,
+    cols = 1:nJ,
+    names_to = "Item",
+    values_to = "Score"
+  )
+
+brm_model <- brm(
+  bf(Score ~ Item + (1|Person), sigma ~ s(Xplus)),
+  data = Xlong,
+  family = gaussian()
+)
+
+
+```
+
+
+
