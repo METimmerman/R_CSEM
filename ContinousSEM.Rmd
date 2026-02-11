@@ -316,10 +316,13 @@ print(kable(sam_estcSEMs_1M, caption = "Estimated cSEMs per sumscore, via model-
 ```
 
 The model with the lowest  BIC is **`r best_model`**. 
+The residual plots show two about linear bands. The two bands are due to the fact that we model binary observed scores, with a model with an assumption of normality of residuals. The direction of the bands puzzles me, that is: I would prefer to see a horizontal band.
+
+@Wilco: wat denk jij?
 
 
 # Future work
 
-** Willen we nog flexibelere variantiefuncties (splines, smooths), dan lijkt het erop dat we Bayesiaans moeten gaan, via brms, of Stan. Daarover gaat de volgende Note.
+* Willen we nog flexibelere variantiefuncties (splines, smooths), dan lijkt het erop dat we Bayesiaans moeten gaan, via brms, of Stan. Daarover gaat de volgende Note.
 
 
